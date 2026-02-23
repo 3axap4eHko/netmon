@@ -133,6 +133,7 @@ fn main() {
                 .icon(icon)
                 .tooltip("NetMon — Network Monitor")
                 .menu(&menu)
+                .show_menu_on_left_click(false)
                 .on_menu_event({
                     let app_handle = app.handle().clone();
                     move |_tray, event| {

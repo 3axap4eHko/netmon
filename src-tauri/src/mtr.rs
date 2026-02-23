@@ -241,7 +241,10 @@ impl MtrEngine {
     }
 
     fn ping_loop(self: Arc<Self>) {
+        let interval = Duration::from_millis(PING_INTERVAL_MS);
         loop {
+            let cycle_start = std::time::Instant::now();
+
             if !self.running.load(Ordering::SeqCst) {
                 break;
             }
@@ -250,13 +253,13 @@ impl MtrEngine {
                 self.ping_all_hops();
             }
 
-            std::thread::sleep(Duration::from_millis(PING_INTERVAL_MS));
+            if let Some(remaining) = interval.checked_sub(cycle_start.elapsed()) {
+                std::thread::sleep(remaining);
+            }
         }
     }
 
     fn ping_all_hops(&self) {
-        let timestamp = now_ms();
-
         // Collect all hops to ping
         let mut work: Vec<(String, HopInfo)> = Vec::new();
         {
@@ -303,6 +306,7 @@ impl MtrEngine {
                         break;
                     }
                     let (target, hop, ip) = &jobs[idx];
+                    let timestamp = now_ms();
                     let latency = pinger.ping_host(&ip, 1500);
                     let record = PingRecord {
                         timestamp,

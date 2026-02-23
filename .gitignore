@@ -8,8 +8,7 @@ dist/
 src-tauri/target/
 
 # IDE
-.vscode/
-.idea/
+.*/
 
 # OS
 Thumbs.db

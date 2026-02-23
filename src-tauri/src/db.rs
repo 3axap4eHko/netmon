@@ -302,12 +302,12 @@ impl Database {
 
         let mut points = self.query_loss_from_pings(target, since, bucket)?;
 
-        // For longer ranges, merge with summary data
-        if range == TimeRange::SevenDays || range == TimeRange::ThirtyDays {
+        // Raw pings are pruned after 2h, so any range beyond 1h needs summary data
+        if range != TimeRange::OneHour {
             let summary_points = self.query_loss_from_summaries(target, since, bucket)?;
             points = merge_chart_points(summary_points, points);
         }
-        if range == TimeRange::ThirtyDays {
+        if range == TimeRange::SevenDays || range == TimeRange::ThirtyDays {
             let hourly_points = self.query_loss_from_hourly(target, since, bucket)?;
             points = merge_chart_points(hourly_points, points);
         }
@@ -322,11 +322,11 @@ impl Database {
 
         let mut points = self.query_latency_from_pings(target, since, bucket)?;
 
-        if range == TimeRange::SevenDays || range == TimeRange::ThirtyDays {
+        if range != TimeRange::OneHour {
             let summary_points = self.query_latency_from_summaries(target, since, bucket)?;
             points = merge_chart_points(summary_points, points);
         }
-        if range == TimeRange::ThirtyDays {
+        if range == TimeRange::SevenDays || range == TimeRange::ThirtyDays {
             let hourly_points = self.query_latency_from_hourly(target, since, bucket)?;
             points = merge_chart_points(hourly_points, points);
         }
