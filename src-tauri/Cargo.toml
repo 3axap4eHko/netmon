@@ -1,0 +1,31 @@
+[package]
+name = "netmon"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tauri = { version = "2.10", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2.4"
+tauri-plugin-autostart = "2.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = { version = "0.38", features = ["bundled"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+dns-lookup = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_System_IO",
+] }
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
