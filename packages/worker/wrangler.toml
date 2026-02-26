@@ -1,0 +1,9 @@
+name = "netmon-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+[triggers]
+crons = ["0 3 * * *"]

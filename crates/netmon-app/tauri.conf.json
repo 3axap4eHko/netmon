@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/tauriapp/main/tauri-schema.json",
+  "productName": "NetMon",
+  "identifier": "com.netmon.app",
+  "version": "1.0.0",
+  "build": {
+    "frontendDist": "../../packages/desktop/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm --filter @netmon/desktop dev",
+    "beforeBuildCommand": "pnpm --filter @netmon/desktop build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "NetMon — Network Monitor",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 800,
+        "minHeight": 500,
+        "visible": true,
+        "decorations": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.netmon.app https://speed.cloudflare.com"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["netmon"]
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+/* Shared chart & table styles */
+
+.chart-card {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.chart-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b949e;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Hop table */
+.hop-table-container {
+  margin-bottom: 20px;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hop-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hop-table th {
+  background: #161b22;
+  padding: 8px 12px;
+  text-align: right;
+  font-weight: 600;
+  color: #8b949e;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #21262d;
+}
+
+.hop-table th:first-child,
+.hop-table td:first-child {
+  text-align: center;
+  width: 40px;
+}
+
+.hop-table th:nth-child(2),
+.hop-table td:nth-child(2) {
+  text-align: left;
+}
+
+.hop-table td {
+  padding: 6px 12px;
+  text-align: right;
+  border-bottom: 1px solid #161b22;
+}
+
+.hop-table tr:hover {
+  background: #161b22;
+}
+
+.hop-table .loss-cell {
+  font-weight: 600;
+}
+
+.loss-good { color: #3fb950; }
+.loss-warn { color: #d29922; }
+.loss-bad { color: #f85149; }
+
+.hop-hostname {
+  color: #c9d1d9;
+  margin-right: 8px;
+}
+
+.hop-ip {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  color: #79c0ff;
+  font-size: 12px;
+}
+
+.hop-timeout {
+  color: #484f58;
+  font-style: italic;
+}
+
+/* Time selector */
+.time-selector {
+  display: flex;
+  gap: 4px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.time-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.time-btn:hover {
+  color: #c9d1d9;
+}
+
+.time-btn.active {
+  background: #1f6feb;
+  color: #fff;
+}

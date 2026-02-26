@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.influxdata.com)",
+      "WebFetch(domain:docs.influxdata.com)",
+      "WebFetch(domain:turso.tech)",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:www.tigerdata.com)",
+      "WebFetch(domain:clickhouse.com)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:aws.amazon.com)",
+      "WebFetch(domain:uibakery.io)",
+      "WebFetch(domain:datatracker.ietf.org)",
+      "Bash(cd D:/projects/js/netmon-rs && cargo check 2>&1)",
+      "Bash(cd D:/projects/js/netmon-rs && pnpm --filter @netmon/desktop build 2>&1)"
+    ]
+  }
+}

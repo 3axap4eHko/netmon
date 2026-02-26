@@ -3,12 +3,14 @@ node_modules/
 
 # Build output
 dist/
+.wrangler/
 
 # Rust
-src-tauri/target/
+target/
 
 # IDE
-.*/
+.vscode/
+.idea/
 
 # OS
 Thumbs.db
@@ -17,3 +19,6 @@ Thumbs.db
 # Env
 .env
 .env.*
+
+# pnpm
+.pnpm-debug.log
