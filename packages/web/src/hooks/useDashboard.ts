@@ -2,6 +2,40 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Target, DashboardData, TimeRange } from '@netmon/shared';
 import * as api from '../api';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string' &&
+    (error as { message: string }).message.trim()
+  ) {
+    return (error as { message: string }).message;
+  }
+  if (typeof error === 'object' && error !== null) {
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}' && serialized !== 'null') {
+        return serialized;
+      }
+    } catch {
+      // Ignore JSON serialization errors and fall through.
+    }
+
+    const stringified = String(error);
+    if (stringified && stringified !== '[object Object]') {
+      return stringified;
+    }
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  return fallback;
+}
+
 export function useDashboard() {
   const [targets, setTargets] = useState<Target[]>([]);
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
@@ -19,7 +53,7 @@ export function useDashboard() {
       setLoading(false);
     }).catch(err => {
       console.error('Failed to load targets:', err);
-      setError('Failed to load targets. Are you signed in?');
+      setError(getErrorMessage(err, 'Failed to load targets. Are you signed in?'));
       setLoading(false);
     });
   }, []);
@@ -33,7 +67,7 @@ export function useDashboard() {
       setError(null);
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
-      setError('Failed to refresh dashboard data.');
+      setError(getErrorMessage(err, 'Failed to refresh dashboard data.'));
     } finally {
       inFlightRef.current = false;
     }

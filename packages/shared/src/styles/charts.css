@@ -1,27 +1,6 @@
-/* Shared chart & table styles */
-
-.chart-card {
-  background: #161b22;
-  border: 1px solid #21262d;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.chart-card h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: #8b949e;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Hop table */
+/* ── Hop Table ── */
 .hop-table-container {
-  margin-bottom: 20px;
-  border: 1px solid #21262d;
-  border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .hop-table {
@@ -32,89 +11,165 @@
 }
 
 .hop-table th {
-  background: #161b22;
-  padding: 8px 12px;
-  text-align: right;
-  font-weight: 600;
-  color: #8b949e;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 14px;
+  background: var(--bg-elevated, #161b22);
+  border-bottom: 1px solid var(--panel-border, #21262d);
+  color: var(--muted, #7d8590);
   font-size: 11px;
+  font-weight: 600;
+  text-align: right;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid #21262d;
+  letter-spacing: 0.06em;
 }
 
 .hop-table th:first-child,
 .hop-table td:first-child {
+  width: 36px;
   text-align: center;
-  width: 40px;
+  color: var(--muted, #7d8590);
 }
 
 .hop-table th:nth-child(2),
 .hop-table td:nth-child(2) {
   text-align: left;
+  width: 45%;
 }
 
 .hop-table td {
-  padding: 6px 12px;
+  padding: 6px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   text-align: right;
-  border-bottom: 1px solid #161b22;
+  font-size: 13px;
 }
 
-.hop-table tr:hover {
-  background: #161b22;
+.hop-table tbody tr:hover {
+  background: rgba(88, 166, 255, 0.04);
 }
 
-.hop-table .loss-cell {
-  font-weight: 600;
-}
-
-.loss-good { color: #3fb950; }
-.loss-warn { color: #d29922; }
-.loss-bad { color: #f85149; }
+.hop-table .loss-cell { font-weight: 700; }
+.loss-good { color: var(--success, #3fb950); }
+.loss-warn { color: var(--warning, #d29922); }
+.loss-bad { color: var(--danger, #f85149); }
 
 .hop-hostname {
-  color: #c9d1d9;
-  margin-right: 8px;
+  display: inline;
+  color: var(--text, #e6edf3);
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .hop-ip {
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  color: #79c0ff;
+  display: inline;
+  margin-left: 8px;
+  color: var(--accent, #58a6ff);
+  font-family: var(--mono, monospace);
   font-size: 12px;
 }
 
 .hop-timeout {
-  color: #484f58;
+  color: var(--muted, #7d8590);
   font-style: italic;
 }
 
-/* Time selector */
+/* ── Chart card ── */
+.chart-card {
+  padding: 12px 16px;
+  border-top: 1px solid var(--panel-border, #21262d);
+  background: var(--panel, #0d1117);
+  min-height: 0;
+}
+
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.chart-card h3 {
+  margin: 0;
+  color: var(--muted, #7d8590);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.chart-card-meta {
+  display: none;
+}
+
+.chart-reset {
+  padding: 4px 8px;
+  border: 1px solid var(--panel-border, #21262d);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text, #e6edf3);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+.chart-reset:hover { background: rgba(255, 255, 255, 0.05); }
+
+.chart-empty { min-height: 200px; }
+
+/* ── Time selector ── */
 .time-selector {
   display: flex;
-  gap: 4px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 6px;
+  align-items: center;
+  gap: 2px;
   padding: 2px;
+  border: 1px solid var(--panel-border, #21262d);
+  border-radius: 6px;
+  background: var(--bg, #0e1117);
 }
 
 .time-btn {
-  padding: 4px 12px;
-  border: none;
+  min-width: 36px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #8b949e;
+  color: var(--muted, #7d8590);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
-  transition: all 0.15s;
+  font-weight: 600;
+  transition: background 100ms, color 100ms;
 }
-
-.time-btn:hover {
-  color: #c9d1d9;
-}
-
+.time-btn:hover { color: var(--text, #e6edf3); background: rgba(255, 255, 255, 0.04); }
 .time-btn.active {
-  background: #1f6feb;
+  background: var(--accent, #58a6ff);
+  color: #fff;
+  border-color: transparent;
+}
+
+.time-date-input {
+  width: 110px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted, #7d8590);
+  color-scheme: dark;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+.time-date-input:hover { color: var(--text, #e6edf3); }
+.time-date-input.active {
+  background: var(--accent, #58a6ff);
   color: #fff;
 }
+.time-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+/* ── Status bar ── */
+.panel-eyebrow { display: none; }

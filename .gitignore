@@ -22,3 +22,7 @@ Thumbs.db
 
 # pnpm
 .pnpm-debug.log
+
+# AI
+CLAUDE.md
+.progress/

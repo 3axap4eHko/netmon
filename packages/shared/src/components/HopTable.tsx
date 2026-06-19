@@ -46,7 +46,7 @@ export const HopTable = React.memo(function HopTable({ hops }: Props) {
                 ) : (
                   <>
                     {hop.hostname && <span className="hop-hostname">{hop.hostname}</span>}
-                    <span className="hop-ip">{hop.ip}</span>
+                    <span className="hop-ip">{hop.hostname ? hop.ip : hop.ip}</span>
                   </>
                 )}
               </td>

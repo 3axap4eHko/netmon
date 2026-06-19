@@ -73,15 +73,9 @@ pub fn get_current_max_loss(db: &Arc<Mutex<Database>>) -> f64 {
         Err(_) => return 0.0,
     };
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as i64;
-    let since = now - 60_000;
-
     let mut max_loss = 0.0f64;
     for t in &targets {
-        if let Ok(stats) = db.get_live_stats(&t.address, since) {
+        if let Ok(stats) = db.get_live_stats(&t.address, crate::types::TimeRange::OneHour) {
             for s in &stats {
                 if s.loss_pct > max_loss {
                     max_loss = s.loss_pct;

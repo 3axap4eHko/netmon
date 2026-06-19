@@ -7,6 +7,10 @@
     "build": "pnpm --filter @netmon/desktop build",
     "build:web": "pnpm --filter @netmon/web build",
     "build:worker": "pnpm --filter @netmon/worker deploy",
-    "tauri": "pnpm --filter @netmon/desktop tauri"
+    "tauri": "pnpm --filter @netmon/desktop tauri",
+    "diagnose:db": "node scripts/diagnose-db.mjs"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^12.6.2"
   }
 }

@@ -5,6 +5,7 @@ mod auth;
 mod cloud_commands;
 mod commands;
 mod db;
+mod http_probe;
 mod load_test;
 mod mtr;
 mod ping;
@@ -12,15 +13,121 @@ mod sync;
 mod tray;
 mod types;
 
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{
     image::Image,
     menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Listener, Manager, WindowEvent,
+    Listener, Manager, PhysicalPosition, PhysicalSize, RunEvent, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+
+type GeoState = Arc<Mutex<Option<WindowGeometry>>>;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct WindowGeometry {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    maximized: bool,
+}
+
+fn window_json_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|dir| dir.join("window.json"))
+}
+
+fn load_window_geometry(path: &Path) -> Option<WindowGeometry> {
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn capture_geometry(window: &WebviewWindow) -> Option<WindowGeometry> {
+    let maximized = window.is_maximized().unwrap_or(false);
+    let position = window.outer_position().ok()?;
+    let size = window.inner_size().ok()?;
+    Some(WindowGeometry {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+        maximized,
+    })
+}
+
+fn apply_geometry(window: &WebviewWindow, geo: &WindowGeometry) {
+    let _ = window.set_size(PhysicalSize::new(geo.width, geo.height));
+    let _ = window.set_position(PhysicalPosition::new(geo.x, geo.y));
+    if geo.maximized {
+        let _ = window.maximize();
+    }
+}
+
+fn attach_close_handler(window: &WebviewWindow, app: &tauri::AppHandle) {
+    let app = app.clone();
+    let window_ref = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { .. } = event {
+            // Let the window be destroyed (no prevent_close) so the webview frees
+            // its resources; the process stays alive via RunEvent::ExitRequested.
+            if let Some(geo) = capture_geometry(&window_ref) {
+                if let Some(state) = app.try_state::<GeoState>() {
+                    if let Ok(mut guard) = state.lock() {
+                        *guard = Some(geo);
+                    }
+                }
+                if let Some(path) = window_json_path(&app) {
+                    match serde_json::to_vec(&geo) {
+                        Ok(json) => {
+                            if let Err(e) = std::fs::write(&path, json) {
+                                eprintln!("Failed to persist window geometry: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("Failed to serialize window geometry: {}", e),
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+
+    let geo = app
+        .try_state::<GeoState>()
+        .and_then(|state| state.lock().ok().and_then(|guard| *guard));
+
+    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+        .title("NetMon — Network Monitor")
+        .min_inner_size(800.0, 500.0)
+        .resizable(true)
+        .decorations(true);
+    let builder = match geo {
+        Some(g) => builder
+            .inner_size(g.width as f64, g.height as f64)
+            .position(g.x as f64, g.y as f64),
+        None => builder.inner_size(1100.0, 750.0),
+    };
+
+    match builder.build() {
+        Ok(window) => {
+            if geo.map(|g| g.maximized).unwrap_or(false) {
+                let _ = window.maximize();
+            }
+            attach_close_handler(&window, app);
+        }
+        Err(e) => eprintln!("Failed to recreate main window: {}", e),
+    }
+}
 
 fn load_icon(png_bytes: &[u8]) -> Image<'static> {
     // Decode PNG to raw RGBA
@@ -33,11 +140,8 @@ fn load_icon(png_bytes: &[u8]) -> Image<'static> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus existing window on second instance
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            // Re-open (or focus) the window on second instance
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -48,13 +152,17 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_targets,
             commands::add_target,
+            commands::set_probe_mode,
             commands::remove_target,
             commands::get_dashboard,
             commands::get_live_stats,
             commands::pause_monitoring,
             commands::resume_monitoring,
+            commands::get_monitoring_paused,
             commands::run_load_test,
             commands::get_load_test_history,
+            commands::get_ui_settings,
+            commands::set_ui_settings,
             cloud_commands::get_auth_state,
             cloud_commands::start_oauth,
             cloud_commands::login_email,
@@ -91,8 +199,11 @@ fn main() {
             // -- ICMP Pinger --
             let pinger = ping::IcmpPinger::new().expect("Failed to create ICMP pinger");
 
+            // -- HTTP Prober --
+            let http_prober = http_probe::HttpProber::new().expect("Failed to create HTTP prober");
+
             // -- MTR Engine --
-            let engine = mtr::MtrEngine::new(Arc::clone(&db), pinger);
+            let engine = mtr::MtrEngine::new(Arc::clone(&db), pinger, http_prober);
 
             // Start monitoring active targets
             let active_targets = {
@@ -101,7 +212,7 @@ fn main() {
                     .get_active_targets()
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|t| t.address)
+                    .map(|t| (t.address, t.probe_mode))
                     .collect::<Vec<_>>()
             };
             engine.start(active_targets);
@@ -124,6 +235,11 @@ fn main() {
             app.manage(Arc::clone(&load_test_engine));
             app.manage(Arc::clone(&auth_manager));
             app.manage(Arc::clone(&sync_engine));
+
+            // -- Persisted window geometry (restored across tray cycles and restarts) --
+            let initial_geo = window_json_path(&app.handle()).and_then(|path| load_window_geometry(&path));
+            let geo_state: GeoState = Arc::new(Mutex::new(initial_geo));
+            app.manage(Arc::clone(&geo_state));
 
             // -- Deep link handler --
             let auth_for_deeplink = Arc::clone(&auth_manager);
@@ -188,12 +304,7 @@ fn main() {
                     move |_tray, event| {
                         match event.id().as_ref() {
                             "open" | "add_target" => {
-                                if let Some(window) =
-                                    app_handle.get_webview_window("main")
-                                {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
+                                show_main_window(&app_handle);
                             }
                             "pause" => {
                                 if let Some(engine) =
@@ -234,28 +345,18 @@ fn main() {
                             ..
                         } = event
                         {
-                            if let Some(window) =
-                                app_handle.get_webview_window("main")
-                            {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
+                            show_main_window(&app_handle);
                         }
                     }
                 })
                 .build(app)?;
 
-            // -- Window close → hide to tray --
+            // -- Window close → destroy webview (frees rendering resources) --
             if let Some(window) = app.get_webview_window("main") {
-                window.on_window_event({
-                    let window = window.clone();
-                    move |event| {
-                        if let WindowEvent::CloseRequested { api, .. } = event {
-                            api.prevent_close();
-                            let _ = window.hide();
-                        }
-                    }
-                });
+                if let Some(geo) = initial_geo {
+                    apply_geometry(&window, &geo);
+                }
+                attach_close_handler(&window, &app.handle());
             }
 
             // -- Background timers --
@@ -295,8 +396,17 @@ fn main() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // Keep the process (and monitoring threads) alive after the window is
+            // closed to the tray; only the explicit Quit menu exits via process::exit.
+            if let RunEvent::ExitRequested { code, api, .. } = event {
+                if code.is_none() {
+                    api.prevent_exit();
+                }
+            }
+        });
 }
 
 fn extract_auth_code(url: &str) -> Option<String> {

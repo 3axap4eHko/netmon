@@ -81,8 +81,8 @@ export function Dashboard() {
         <>
           <HopTable hops={data.hops} />
           <div className="charts-grid">
-            <LossChart data={data.lossChart} hopCount={hopCount} />
-            <LatencyChart data={data.latencyChart} hopCount={hopCount} />
+            <LossChart data={data.lossChart} hopCount={hopCount} timeRange={timeRange} />
+            <LatencyChart data={data.latencyChart} hopCount={hopCount} timeRange={timeRange} />
           </div>
         </>
       )}

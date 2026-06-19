@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::db::Database;
+use crate::http_probe::HttpProber;
 use crate::ping::{resolve_ipv4, IcmpPinger};
-use crate::types::{HopInfo, PingRecord};
+use crate::types::{HopInfo, PingRecord, ProbeMode, ICMP_PAYLOAD_STANDARD};
 
 const PING_INTERVAL_MS: u64 = 2000;
 const MAX_TTL: u8 = 30;
@@ -22,6 +23,7 @@ fn now_ms() -> i64 {
 struct TargetState {
     hops: Vec<HopInfo>,
     discovering: bool,
+    probe_mode: ProbeMode,
 }
 
 #[derive(Clone)]
@@ -37,10 +39,11 @@ pub struct MtrEngine {
     running: AtomicBool,
     db: Arc<Mutex<Database>>,
     pinger: Arc<IcmpPinger>,
+    http_prober: Arc<HttpProber>,
 }
 
 impl MtrEngine {
-    pub fn new(db: Arc<Mutex<Database>>, pinger: IcmpPinger) -> Arc<Self> {
+    pub fn new(db: Arc<Mutex<Database>>, pinger: IcmpPinger, http_prober: HttpProber) -> Arc<Self> {
         Arc::new(Self {
             targets: Mutex::new(HashMap::new()),
             hostname_cache: Mutex::new(HashMap::new()),
@@ -48,28 +51,37 @@ impl MtrEngine {
             running: AtomicBool::new(false),
             db,
             pinger: Arc::new(pinger),
+            http_prober: Arc::new(http_prober),
         })
     }
 
-    pub fn start(self: &Arc<Self>, addresses: Vec<String>) {
+    pub fn start(self: &Arc<Self>, targets_with_mode: Vec<(String, ProbeMode)>) {
         {
             let mut targets = self.targets.lock().unwrap();
-            for addr in &addresses {
+            for (addr, mode) in &targets_with_mode {
                 if !targets.contains_key(addr) {
                     targets.insert(
                         addr.clone(),
                         TargetState {
                             hops: Vec::new(),
                             discovering: false,
+                            probe_mode: *mode,
                         },
                     );
                 }
             }
         }
 
-        // Discover hops for each target
-        for addr in &addresses {
-            self.spawn_discover(addr.clone());
+        // Discover hops for ICMP targets, set up synthetic hop for HTTP targets
+        for (addr, mode) in &targets_with_mode {
+            match mode {
+                ProbeMode::Http => {
+                    self.setup_http_target(addr.clone());
+                }
+                _ => {
+                    self.spawn_discover(addr.clone());
+                }
+            }
         }
 
         // Start the ping loop on a background thread
@@ -81,7 +93,7 @@ impl MtrEngine {
         }
     }
 
-    pub fn add_target(self: &Arc<Self>, address: String) {
+    pub fn add_target(self: &Arc<Self>, address: String, probe_mode: ProbeMode) {
         {
             let mut targets = self.targets.lock().unwrap();
             if targets.contains_key(&address) {
@@ -92,15 +104,61 @@ impl MtrEngine {
                 TargetState {
                     hops: Vec::new(),
                     discovering: false,
+                    probe_mode,
                 },
             );
         }
-        self.spawn_discover(address);
+        match probe_mode {
+            ProbeMode::Http => self.setup_http_target(address),
+            _ => self.spawn_discover(address),
+        }
     }
 
     pub fn remove_target(&self, address: &str) {
         let mut targets = self.targets.lock().unwrap();
         targets.remove(address);
+    }
+
+    /// Switch an existing target's probe mode in real time.
+    pub fn set_probe_mode(self: &Arc<Self>, address: &str, new_mode: ProbeMode) {
+        let mut needs_http_setup = false;
+        let mut needs_discovery = false;
+
+        {
+            let mut targets = self.targets.lock().unwrap();
+            if let Some(target) = targets.get_mut(address) {
+                if target.probe_mode == new_mode {
+                    return;
+                }
+
+                let was_http = target.probe_mode == ProbeMode::Http;
+                let is_http = new_mode == ProbeMode::Http;
+
+                target.probe_mode = new_mode;
+
+                if was_http && !is_http {
+                    target.hops.clear();
+                    target.discovering = false;
+                    needs_discovery = true;
+                } else if !was_http && is_http {
+                    target.hops.clear();
+                    target.discovering = false;
+                    needs_http_setup = true;
+                }
+            }
+        }
+
+        if needs_http_setup {
+            self.setup_http_target(address.to_string());
+        }
+
+        if needs_discovery {
+            self.spawn_discover(address.to_string());
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
     }
 
     pub fn pause(&self) {
@@ -109,12 +167,15 @@ impl MtrEngine {
 
     pub fn resume(self: &Arc<Self>) {
         self.paused.store(false, Ordering::SeqCst);
-        let addresses: Vec<String> = {
+        let entries: Vec<(String, ProbeMode)> = {
             let targets = self.targets.lock().unwrap();
-            targets.keys().cloned().collect()
+            targets.iter().map(|(k, v)| (k.clone(), v.probe_mode)).collect()
         };
-        for addr in addresses {
-            self.spawn_discover(addr);
+        for (addr, mode) in entries {
+            match mode {
+                ProbeMode::Http => self.setup_http_target(addr),
+                _ => self.spawn_discover(addr),
+            }
         }
     }
 
@@ -152,22 +213,47 @@ impl MtrEngine {
         hostname
     }
 
+    pub fn get_target_hops(&self, address: &str) -> Vec<HopInfo> {
+        let targets = self.targets.lock().unwrap();
+        targets
+            .get(address)
+            .map(|target| target.hops.clone())
+            .unwrap_or_default()
+    }
+
+    fn setup_http_target(&self, address: String) {
+        let mut targets = self.targets.lock().unwrap();
+        if let Some(t) = targets.get_mut(&address) {
+            // HTTP targets get a single synthetic hop — no traceroute discovery
+            t.hops = vec![HopInfo {
+                hop: 1,
+                ip: address.clone(),
+            }];
+            t.discovering = false;
+        }
+    }
+
     fn spawn_discover(self: &Arc<Self>, address: String) {
         let engine = Arc::clone(self);
         let pinger = Arc::clone(&self.pinger);
         std::thread::spawn(move || {
-            // Check if already discovering
-            {
+            // Check if already discovering and get payload size
+            let payload_size = {
                 let mut targets = engine.targets.lock().unwrap();
                 if let Some(t) = targets.get_mut(&address) {
                     if t.discovering {
                         return;
                     }
                     t.discovering = true;
+                    t.probe_mode.payload_size()
                 } else {
                     return;
                 }
-            }
+            };
+
+            // Discovery always uses standard payload to avoid fragmentation issues during traceroute
+            let discovery_payload = ICMP_PAYLOAD_STANDARD;
+            let _ = payload_size; // actual payload_size used during ping_all_hops
 
             let target_ip = match resolve_ipv4(&address) {
                 Some(ip) => ip,
@@ -183,7 +269,7 @@ impl MtrEngine {
             let mut hops: Vec<HopInfo> = Vec::new();
 
             for ttl in 1..=MAX_TTL {
-                let result = pinger.trace_hop(&target_ip, ttl);
+                let result = pinger.trace_hop(&target_ip, ttl, discovery_payload);
                 if let Some(ip) = result {
                     hops.push(HopInfo {
                         hop: ttl as i32,
@@ -203,6 +289,22 @@ impl MtrEngine {
             // Trim trailing * hops
             while hops.last().map(|h| h.ip.as_str()) == Some("*") {
                 hops.pop();
+            }
+
+            // If traceroute yields no usable hops, keep monitoring alive by
+            // falling back to a direct target hop instead of leaving the target
+            // permanently stuck in an empty "discovering" state.
+            if hops.is_empty() {
+                hops.push(HopInfo {
+                    hop: 1,
+                    ip: target_ip.clone(),
+                });
+            } else if !hops.iter().any(|hop| hop.ip == target_ip) {
+                let next_hop = hops.last().map(|hop| hop.hop + 1).unwrap_or(1);
+                hops.push(HopInfo {
+                    hop: next_hop,
+                    ip: target_ip.clone(),
+                });
             }
 
             // Update target with discovered hops
@@ -260,37 +362,43 @@ impl MtrEngine {
     }
 
     fn ping_all_hops(&self) {
-        // Collect all hops to ping
-        let mut work: Vec<(String, HopInfo)> = Vec::new();
+        // Collect all hops to ping, partitioned by mode
+        let mut icmp_jobs: Vec<(String, i32, String, usize)> = Vec::new(); // (target, hop, ip, payload_size)
+        let mut http_jobs: Vec<(String, String)> = Vec::new(); // (target_address, ip)
         {
             let targets = self.targets.lock().unwrap();
             for (address, state) in targets.iter() {
                 for hop in &state.hops {
-                    work.push((address.clone(), hop.clone()));
+                    if hop.ip == "*" {
+                        continue;
+                    }
+                    match state.probe_mode {
+                        ProbeMode::Http => {
+                            http_jobs.push((address.clone(), hop.ip.clone()));
+                        }
+                        _ => {
+                            icmp_jobs.push((
+                                address.clone(),
+                                hop.hop,
+                                hop.ip.clone(),
+                                state.probe_mode.payload_size(),
+                            ));
+                        }
+                    }
                 }
             }
         }
 
-        if work.is_empty() {
+        if icmp_jobs.is_empty() && http_jobs.is_empty() {
             return;
         }
 
         let mut records: Vec<PingRecord> = Vec::new();
-        let mut jobs: Vec<(String, i32, String)> = Vec::new();
 
-        for (address, hop) in work {
-            if hop.ip == "*" {
-                // Unknown hops are placeholders from discovery and should not
-                // be treated as real probe endpoints in persisted metrics.
-                continue;
-            }
-
-            jobs.push((address, hop.hop, hop.ip));
-        }
-
-        if !jobs.is_empty() {
-            let worker_count = usize::min(MAX_CONCURRENT_PINGS, jobs.len());
-            let jobs = Arc::new(jobs);
+        // ICMP jobs — worker pool
+        if !icmp_jobs.is_empty() {
+            let worker_count = usize::min(MAX_CONCURRENT_PINGS, icmp_jobs.len());
+            let jobs = Arc::new(icmp_jobs);
             let next_index = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let records_shared = Arc::new(Mutex::new(Vec::<PingRecord>::with_capacity(jobs.len())));
             let mut workers = Vec::with_capacity(worker_count);
@@ -305,9 +413,9 @@ impl MtrEngine {
                     if idx >= jobs.len() {
                         break;
                     }
-                    let (target, hop, ip) = &jobs[idx];
+                    let (target, hop, ip, payload_size) = &jobs[idx];
                     let timestamp = now_ms();
-                    let latency = pinger.ping_host(&ip, 1500);
+                    let latency = pinger.ping_host(ip, 1500, *payload_size);
                     let record = PingRecord {
                         timestamp,
                         target: target.clone(),
@@ -330,6 +438,20 @@ impl MtrEngine {
                 out.drain(..).collect::<Vec<_>>()
             };
             records.extend(drained);
+        }
+
+        // HTTP jobs — sequential (typically 1-3 targets)
+        for (target_address, ip) in &http_jobs {
+            let timestamp = now_ms();
+            let latency = self.http_prober.probe(target_address);
+            records.push(PingRecord {
+                timestamp,
+                target: target_address.clone(),
+                hop: 1,
+                ip: ip.clone(),
+                latency_ms: latency,
+                is_timeout: latency.is_none(),
+            });
         }
 
         if !records.is_empty() {

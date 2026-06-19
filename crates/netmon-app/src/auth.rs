@@ -28,7 +28,8 @@ pub struct DeviceInfo {
 struct TokenResponse {
     access_token: String,
     refresh_token: Option<String>,
-    user_id: Option<String>,
+    #[serde(rename = "userId")]
+    _user_id: Option<String>,
 }
 
 pub struct AuthManager {

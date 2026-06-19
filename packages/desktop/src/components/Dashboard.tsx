@@ -1,17 +1,28 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { HopTable, LossChart, LatencyChart, TimeSelector } from '@netmon/shared';
+import type { ProbeMode } from '@netmon/shared';
 import { useDashboard } from '../hooks/useDashboard';
+import { loadStored, saveStored } from '../storage';
 import { useAuth } from '../hooks/useAuth';
-import { AddTargetModal } from './AddTargetModal';
 import { LoginModal } from './LoginModal';
 import { AccountPage } from './AccountPage';
 import { SyncIndicator } from './SyncIndicator';
 import { LoadTestPanel } from './LoadTestPanel';
 
+const PROBE_LABELS: Record<ProbeMode, string> = {
+  icmp: 'ICMP 32B',
+  'icmp-large': 'ICMP 1472B',
+  http: 'HTTP Upload',
+};
+
+const SHOW_LOAD_TEST_KEY = 'netmon.showLoadTest';
+const CHART_VIEWPORT_KEY = 'netmon.chartViewport';
+
 export const Dashboard = React.memo(function Dashboard() {
   const {
     targets,
     activeTarget,
+    activeTargetDetails,
     setActiveTarget,
     timeRange,
     setTimeRange,
@@ -20,95 +31,124 @@ export const Dashboard = React.memo(function Dashboard() {
     paused,
     error,
     clearError,
-    handleAddTarget,
-    handleRemoveTarget,
+    handleProbeModeChange,
+    restoreDefaultTargets,
     togglePause,
   } = useDashboard();
 
   const auth = useAuth();
 
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountPage, setShowAccountPage] = useState(false);
-  const [showLoadTest, setShowLoadTest] = useState(false);
+  const [showLoadTest, setShowLoadTest] = useState(() => loadStored(SHOW_LOAD_TEST_KEY, false));
+  const [chartViewport, setChartViewport] = useState<[number, number] | null>(() => loadStored<[number, number] | null>(CHART_VIEWPORT_KEY, null));
 
-  const onAddTarget = useCallback(
-    async (address: string, label: string) => {
-      await handleAddTarget(address, label);
-      setShowAddModal(false);
-    },
-    [handleAddTarget]
-  );
+  const skipViewportReset = useRef(true);
+  useEffect(() => {
+    if (skipViewportReset.current) {
+      skipViewportReset.current = false;
+      return;
+    }
+    setChartViewport(null);
+  }, [activeTarget, timeRange]);
 
-  const onCloseModal = useCallback(() => setShowAddModal(false), []);
-  const onOpenModal = useCallback(() => setShowAddModal(true), []);
+  useEffect(() => {
+    saveStored(CHART_VIEWPORT_KEY, chartViewport);
+  }, [chartViewport]);
 
-  if (loading) {
+  useEffect(() => {
+    saveStored(SHOW_LOAD_TEST_KEY, showLoadTest);
+  }, [showLoadTest]);
+
+  const hopCount = data?.hops?.length ?? 0;
+  const probeLabel = activeTargetDetails ? PROBE_LABELS[activeTargetDetails.probeMode] : 'Idle';
+  const isHttpTarget = activeTargetDetails?.probeMode === 'http';
+
+  if (loading && !data && targets.length === 0) {
     return (
       <div className="dashboard">
-        <div className="loading">
+        <div className="loading loading-panel panel-card">
           <div className="spinner" />
-          Discovering network hops...
+          Loading dashboard...
         </div>
       </div>
     );
   }
 
-  const activeTargets = targets.filter(t => t.active);
-  const hopCount = data?.hops?.length ?? 0;
-
   return (
     <div className="dashboard">
-      <div className="header">
-        <h1>NetMon</h1>
-        <div className="header-controls">
-          {auth.authenticated && <SyncIndicator />}
-          <TimeSelector value={timeRange} onChange={setTimeRange} />
-          <button className="btn" onClick={() => setShowLoadTest(v => !v)}>
-            Speed Test
-          </button>
-          <button className="btn" onClick={togglePause}>
-            {paused ? 'Resume' : 'Pause'}
-          </button>
-          {auth.authenticated ? (
-            <button
-              className="btn"
-              onClick={() => setShowAccountPage(true)}
-              title={auth.email || ''}
-            >
-              Account
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowLoginModal(true)}
-            >
-              Sign In
-            </button>
-          )}
-        </div>
-      </div>
+      <header className="panel-card monitor-bar">
+        {targets.length > 0 && (
+          <div className="monitor-controls">
+            <label className="toolbar-field toolbar-target">
+              <span className="toolbar-label">Target</span>
+              <select
+                value={activeTarget ?? ''}
+                onChange={event => setActiveTarget(event.target.value)}
+              >
+                {targets.map(target => (
+                  <option key={target.id} value={target.address}>
+                    {target.label} · {target.address}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-      <div className="target-bar">
-        {activeTargets.map(t => (
-          <button
-            key={t.id}
-            className={`target-btn ${t.address === activeTarget ? 'active' : ''}`}
-            onClick={() => setActiveTarget(t.address)}
-          >
-            {t.label}
-            <span
-              className="remove"
-              onClick={(e) => { e.stopPropagation(); handleRemoveTarget(t.id); }}
-            >
-              x
-            </span>
-          </button>
-        ))}
-        <button className="target-btn add" onClick={onOpenModal}>
-          + Add Target
-        </button>
-      </div>
+            <div className="toolbar-field toolbar-profile">
+              <span className="toolbar-label">Profile</span>
+              {activeTargetDetails && !isHttpTarget ? (
+                <select
+                  value={activeTargetDetails.probeMode}
+                  onChange={event => void handleProbeModeChange(
+                    activeTargetDetails.address,
+                    event.target.value as ProbeMode,
+                  )}
+                >
+                  <option value="icmp">ICMP 32B</option>
+                  <option value="icmp-large">ICMP 1472B</option>
+                </select>
+              ) : (
+                <div className="field-readout">{probeLabel}</div>
+              )}
+            </div>
+
+            <div className="toolbar-field toolbar-range">
+              <span className="toolbar-label">Range</span>
+              <TimeSelector value={timeRange} onChange={setTimeRange} />
+            </div>
+
+            <div className="toolbar-meta">
+              {auth.authenticated && <SyncIndicator />}
+              <div className={`status-pill ${paused ? 'paused' : ''}`}>
+                <span className={`status-dot ${paused ? 'yellow' : 'green'}`} />
+                {paused ? 'Paused' : 'Live'}
+              </div>
+            </div>
+
+            <div className="monitor-actions">
+              <button className="btn" onClick={() => setShowLoadTest(value => !value)}>
+                {showLoadTest ? 'Hide Speed Test' : 'Speed Test'}
+              </button>
+              <button className="btn" onClick={togglePause}>
+                {paused ? 'Resume' : 'Pause'}
+              </button>
+              {auth.authenticated ? (
+                <button
+                  className="btn"
+                  onClick={() => setShowAccountPage(true)}
+                  title={auth.email || ''}
+                >
+                  Account
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={() => setShowLoginModal(true)}>
+                  Sign In
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </header>
 
       {error && (
         <div className="error-banner">
@@ -117,43 +157,72 @@ export const Dashboard = React.memo(function Dashboard() {
         </div>
       )}
 
-      {!data || data.hops.length === 0 ? (
-        <div className="empty-state">
-          <h2>Discovering hops...</h2>
-          <p>The MTR engine is tracing the route to {activeTarget}. This may take a moment.</p>
+      {targets.length === 0 ? (
+        <div className="empty-state panel-card">
+          <h2>No monitoring targets loaded</h2>
+          <p>Restore the built-in targets first, then refine the route dashboard from there.</p>
+          <div className="empty-action-row">
+            <button className="btn btn-primary" onClick={() => void restoreDefaultTargets()}>
+              Restore Built-In Targets
+            </button>
+          </div>
+        </div>
+      ) : !activeTargetDetails ? (
+        <div className="empty-state panel-card">
+          <h2>No target selected</h2>
+          <p>Pick a target to inspect its current route and timeline.</p>
         </div>
       ) : (
         <>
-          <HopTable hops={data.hops} />
+          {loading ? (
+            <div className="loading loading-panel panel-card">
+              <div className="spinner" />
+              Refreshing route data...
+            </div>
+          ) : !data || data.hops.length === 0 ? (
+            <div className="empty-state panel-card">
+              <h2>{isHttpTarget ? 'Starting HTTP probes...' : 'Discovering hops...'}</h2>
+              <p>
+                {isHttpTarget
+                  ? `Sending HTTP upload probes for ${activeTargetDetails.label}.`
+                  : `Tracing the route to ${activeTargetDetails.label} (${activeTargetDetails.address}).`}
+              </p>
+            </div>
+          ) : (
+            <div className="workspace">
+              <section className="route-section">
+                <HopTable hops={data.hops} />
+              </section>
 
-          <div className="charts-grid">
-            <LossChart data={data.lossChart} hopCount={hopCount} />
-            <LatencyChart data={data.latencyChart} hopCount={hopCount} />
-          </div>
+              <section className="charts-row">
+                <LossChart
+                  data={data.lossChart}
+                  hopCount={hopCount}
+                  timeRange={timeRange}
+                  height={220}
+                  viewport={chartViewport}
+                  onViewportChange={setChartViewport}
+                />
+                <LatencyChart
+                  data={data.latencyChart}
+                  hopCount={hopCount}
+                  timeRange={timeRange}
+                  height={220}
+                  viewport={chartViewport}
+                  onViewportChange={setChartViewport}
+                />
+              </section>
+            </div>
+          )}
+
+          {showLoadTest && <LoadTestPanel />}
         </>
-      )}
-
-      {showLoadTest && <LoadTestPanel />}
-
-      <div className="status-bar">
-        <span>
-          <span className={`status-dot ${paused ? 'yellow' : 'green'}`} />
-          {paused ? 'Paused' : 'Monitoring'}
-          {activeTarget ? ` — ${activeTarget}` : ''}
-        </span>
-        <span>
-          {data?.hops?.length ?? 0} hops discovered
-        </span>
-      </div>
-
-      {showAddModal && (
-        <AddTargetModal onAdd={onAddTarget} onClose={onCloseModal} />
       )}
 
       {showLoginModal && (
         <LoginModal
-          onLogin={async (e, p) => { await auth.loginEmail(e, p); }}
-          onRegister={async (e, p) => { await auth.registerEmail(e, p); }}
+          onLogin={async (email, password) => { await auth.loginEmail(email, password); }}
+          onRegister={async (email, password) => { await auth.registerEmail(email, password); }}
           onOAuth={auth.startOAuth}
           onClose={() => setShowLoginModal(false)}
         />

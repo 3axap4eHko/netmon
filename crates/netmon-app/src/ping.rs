@@ -63,10 +63,10 @@ impl IcmpPinger {
     }
 
     /// Ping an IP address with a specific TTL. Returns the responding IP and latency.
-    pub fn ping(&self, ip: &str, timeout_ms: u32, ttl: u8) -> Option<PingResult> {
+    pub fn ping(&self, ip: &str, timeout_ms: u32, ttl: u8, payload_size: usize) -> Option<PingResult> {
         let resolved_ip = resolve_ipv4(ip)?;
         let addr = parse_ipv4_literal(&resolved_ip)?;
-        let send_data: [u8; 32] = [0u8; 32];
+        let send_data: Vec<u8> = vec![0u8; payload_size];
 
         let options = IpOptionInfo {
             ttl,
@@ -77,7 +77,7 @@ impl IcmpPinger {
         };
 
         // Allocate a generous reply buffer (at least sizeof(ICMP_ECHO_REPLY) + 8 + data)
-        let reply_size = std::mem::size_of::<IcmpEchoReply>() + send_data.len() + 64;
+        let reply_size = std::mem::size_of::<IcmpEchoReply>() + payload_size + 64;
         let mut reply_buf: Vec<u8> = vec![0u8; reply_size];
 
         let ret = unsafe {
@@ -131,8 +131,8 @@ impl IcmpPinger {
     }
 
     /// Simple ping (TTL=128, just get latency).
-    pub fn ping_host(&self, ip: &str, timeout_ms: u32) -> Option<f64> {
-        let result = self.ping(ip, timeout_ms, 128)?;
+    pub fn ping_host(&self, ip: &str, timeout_ms: u32, payload_size: usize) -> Option<f64> {
+        let result = self.ping(ip, timeout_ms, 128, payload_size)?;
         if result.ttl_expired {
             return None;
         }
@@ -140,8 +140,8 @@ impl IcmpPinger {
     }
 
     /// Trace a single hop by pinging target with specific TTL.
-    pub fn trace_hop(&self, target: &str, ttl: u8) -> Option<String> {
-        let result = self.ping(target, 1000, ttl)?;
+    pub fn trace_hop(&self, target: &str, ttl: u8, payload_size: usize) -> Option<String> {
+        let result = self.ping(target, 1000, ttl, payload_size)?;
         Some(result.ip)
     }
 }
@@ -165,15 +165,15 @@ impl IcmpPinger {
         ))
     }
 
-    pub fn ping(&self, _ip: &str, _timeout_ms: u32, _ttl: u8) -> Option<PingResult> {
+    pub fn ping(&self, _ip: &str, _timeout_ms: u32, _ttl: u8, _payload_size: usize) -> Option<PingResult> {
         None
     }
 
-    pub fn ping_host(&self, _ip: &str, _timeout_ms: u32) -> Option<f64> {
+    pub fn ping_host(&self, _ip: &str, _timeout_ms: u32, _payload_size: usize) -> Option<f64> {
         None
     }
 
-    pub fn trace_hop(&self, _target: &str, _ttl: u8) -> Option<String> {
+    pub fn trace_hop(&self, _target: &str, _ttl: u8, _payload_size: usize) -> Option<String> {
         None
     }
 }
