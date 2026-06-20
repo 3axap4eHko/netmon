@@ -155,14 +155,12 @@ impl Drop for IcmpPinger {
     }
 }
 
-// Fallback for non-Windows
+// Fallback for non-Windows: construction succeeds so the app still runs, but all
+// ICMP probes report no data. HTTP probe targets remain fully functional.
 #[cfg(not(windows))]
 impl IcmpPinger {
     pub fn new() -> io::Result<Self> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "ICMP pinger only supported on Windows",
-        ))
+        Ok(Self {})
     }
 
     pub fn ping(&self, _ip: &str, _timeout_ms: u32, _ttl: u8, _payload_size: usize) -> Option<PingResult> {
