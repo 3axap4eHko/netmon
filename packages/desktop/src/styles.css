@@ -330,6 +330,43 @@ button, input, select { font: inherit; color: inherit; }
 
 .panel-card { /* compat stub */ }
 
+.report-card { width: min(100%, 760px); display: flex; flex-direction: column; max-height: 88vh; }
+.report-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.report-subtitle { margin-top: 2px; color: var(--muted); font-size: 12px; }
+.report-text {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.report-footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+
+@media print {
+  body * { visibility: hidden; }
+  .report-print, .report-print * { visibility: visible; }
+  .report-print {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    overflow: visible;
+    white-space: pre-wrap;
+    color: #000;
+    background: #fff;
+    font-size: 11px;
+  }
+  .report-actions { display: none !important; }
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {

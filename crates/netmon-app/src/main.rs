@@ -9,6 +9,7 @@ mod http_probe;
 mod load_test;
 mod mtr;
 mod ping;
+mod report;
 mod sync;
 mod tray;
 mod types;
@@ -163,6 +164,7 @@ fn main() {
             commands::get_load_test_history,
             commands::get_ui_settings,
             commands::set_ui_settings,
+            report::generate_report,
             cloud_commands::get_auth_state,
             cloud_commands::start_oauth,
             cloud_commands::login_email,

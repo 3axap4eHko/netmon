@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Target, DashboardData, HopStats, TimeRange, LoadTestResult, ProbeMode } from '@netmon/shared';
+import type { Target, DashboardData, HopStats, TimeRange, LoadTestResult, ProbeMode, ReportData } from '@netmon/shared';
 
 export async function getTargets(): Promise<Target[]> {
   return invoke('get_targets');
@@ -44,4 +44,8 @@ export async function runLoadTest(): Promise<LoadTestResult> {
 
 export async function getLoadTestHistory(): Promise<LoadTestResult[]> {
   return invoke('get_load_test_history');
+}
+
+export async function generateReport(range: TimeRange, targets?: string[]): Promise<ReportData> {
+  return invoke('generate_report', { range, targets: targets ?? null });
 }

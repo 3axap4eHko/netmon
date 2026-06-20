@@ -685,6 +685,39 @@ impl Database {
         Ok(downsample(build_chart_points(filtered), 200))
     }
 
+    /// Per-hour (sent, loss_count) buckets for one target+hop across all tiers,
+    /// not downsampled. Used by report generation for outage and pattern analysis.
+    pub fn get_hop_loss_series(
+        &self,
+        target: &str,
+        hop: i32,
+        since: i64,
+        until: i64,
+    ) -> SqlResult<Vec<(i64, i64, i64)>> {
+        let (current_hour, current_15min) = self.tier_boundaries();
+        let hour_ms: i64 = 60 * 60 * 1000;
+
+        let sql = format!(
+            "SELECT bucket, SUM(sent), SUM(loss) FROM ( \
+                SELECT (timestamp/{hour_ms}*{hour_ms}) AS bucket, sent AS sent, loss_count AS loss \
+                FROM stats_hourly WHERE target=?1 AND hop=?2 AND timestamp>=?3 AND timestamp<?4 AND ip!='*' \
+                UNION ALL \
+                SELECT (timestamp/{hour_ms}*{hour_ms}), sent, loss_count \
+                FROM stats_15min WHERE target=?1 AND hop=?2 AND timestamp>=?5 AND timestamp<?6 AND ip!='*' \
+                UNION ALL \
+                SELECT (timestamp/{hour_ms}*{hour_ms}), 1, is_timeout \
+                FROM pings WHERE target=?1 AND hop=?2 AND timestamp>=?7 AND timestamp<?4 AND ip!='*' \
+            ) GROUP BY bucket ORDER BY bucket"
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![target, hop, since, until, current_hour, current_15min, current_15min],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)),
+        )?;
+        rows.collect()
+    }
+
     // -- Aggregation (continuous, bounded) --
     //
     // Key principle: aggregate based on BUCKET COMPLETION (not retention).

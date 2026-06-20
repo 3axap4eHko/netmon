@@ -98,3 +98,50 @@ export interface DashboardData {
   lossChart: ChartPoint[];
   latencyChart: ChartPoint[];
 }
+
+export interface HopAttribution {
+  hop: number;
+  ip: string;
+  lossPct: number;
+  scope: 'local-gateway' | 'beyond-gateway';
+}
+
+export interface TargetReport {
+  address: string;
+  label: string;
+  probeMode: ProbeMode;
+  samples: number;
+  lossPct: number;
+  avgLatencyMs: number;
+  worstLatencyMs: number;
+  availabilityPct: number;
+  firstLossHop: HopAttribution | null;
+}
+
+export interface OutageEvent {
+  start: number;
+  end: number;
+  durationSecs: number;
+  peakLossPct: number;
+}
+
+export interface ReportBucket {
+  timestamp: number;
+  sent: number;
+  lossPct: number;
+}
+
+export interface ReportData {
+  generatedAt: number;
+  periodStart: number;
+  periodEnd: number;
+  deviceName: string;
+  platform: string;
+  overallLossPct: number;
+  totalSamples: number;
+  targets: TargetReport[];
+  outages: OutageEvent[];
+  lossSeries: ReportBucket[];
+  loadTests: LoadTestResult[];
+  probeIntervalSecs: number;
+}

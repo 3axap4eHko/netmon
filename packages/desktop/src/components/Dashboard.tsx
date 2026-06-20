@@ -8,6 +8,7 @@ import { LoginModal } from './LoginModal';
 import { AccountPage } from './AccountPage';
 import { SyncIndicator } from './SyncIndicator';
 import { LoadTestPanel } from './LoadTestPanel';
+import { ReportPanel } from './ReportPanel';
 
 const PROBE_LABELS: Record<ProbeMode, string> = {
   icmp: 'ICMP 32B',
@@ -40,6 +41,7 @@ export const Dashboard = React.memo(function Dashboard() {
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountPage, setShowAccountPage] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [showLoadTest, setShowLoadTest] = useState(() => loadStored(SHOW_LOAD_TEST_KEY, false));
   const [chartViewport, setChartViewport] = useState<[number, number] | null>(() => loadStored<[number, number] | null>(CHART_VIEWPORT_KEY, null));
 
@@ -126,6 +128,9 @@ export const Dashboard = React.memo(function Dashboard() {
             </div>
 
             <div className="monitor-actions">
+              <button className="btn" onClick={() => setShowReport(true)}>
+                Report
+              </button>
               <button className="btn" onClick={() => setShowLoadTest(value => !value)}>
                 {showLoadTest ? 'Hide Speed Test' : 'Speed Test'}
               </button>
@@ -236,6 +241,8 @@ export const Dashboard = React.memo(function Dashboard() {
           onClose={() => setShowAccountPage(false)}
         />
       )}
+
+      {showReport && <ReportPanel onClose={() => setShowReport(false)} />}
     </div>
   );
 });
