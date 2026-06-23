@@ -107,22 +107,23 @@ fn show_main_window(app: &tauri::AppHandle) {
         .try_state::<GeoState>()
         .and_then(|state| state.lock().ok().and_then(|guard| *guard));
 
-    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+    // The builder's position/inner_size are logical pixels, which restore wrong
+    // on scaled displays. Build at the default size (hidden when geometry is
+    // known) and restore it in physical pixels via apply_geometry, then show.
+    let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("NetMon — Network Monitor")
+        .inner_size(1100.0, 750.0)
         .min_inner_size(800.0, 500.0)
         .resizable(true)
-        .decorations(true);
-    let builder = match geo {
-        Some(g) => builder
-            .inner_size(g.width as f64, g.height as f64)
-            .position(g.x as f64, g.y as f64),
-        None => builder.inner_size(1100.0, 750.0),
-    };
+        .decorations(true)
+        .visible(geo.is_none())
+        .build();
 
-    match builder.build() {
+    match window {
         Ok(window) => {
-            if geo.map(|g| g.maximized).unwrap_or(false) {
-                let _ = window.maximize();
+            if let Some(g) = geo {
+                apply_geometry(&window, &g);
+                let _ = window.show();
             }
             attach_close_handler(&window, app);
         }
